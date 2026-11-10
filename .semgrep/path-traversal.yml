@@ -1,3 +1,4 @@
+
 rules:
   - id: ift3913-path-traversal
     languages:
