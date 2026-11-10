@@ -45,9 +45,25 @@ jobs:
       - name: Installer Semgrep
         run: python -m pip install semgrep==1.184.0
 
+      - name: Verifier les fichiers de configuration
+        run: |
+          ls -la .semgrep/
+
+          for fichier in \
+            hardcoded-password.yml \
+            insecure-token.yml \
+            insecure-tls.yml \
+            path-traversal.yml
+          do
+            if [ ! -f ".semgrep/$fichier" ]; then
+              echo "ERREUR : fichier manquant : $fichier"
+              exit 1
+            fi
+          done
+
       - name: Analyser Tika avec Semgrep
         run: |
-          semgrep scan \
+          semgrep scan --verbose \
             --config auto \
             --config .semgrep/hardcoded-password.yml \
             --config .semgrep/insecure-token.yml \
@@ -57,7 +73,7 @@ jobs:
             --output semgrep-results.json \
             tika-core
 
-      - name: Verifier les 7 types de vulnerabilites
+      - name: Verifier les 7 vulnerabilites
         run: |
           python - <<'PY'
           import json
@@ -78,11 +94,10 @@ jobs:
 
           results = data["results"]
           errors = data.get("errors", [])
-
-          print("Alertes totales :", len(results))
-          print("Erreurs Semgrep :", len(errors))
-
           missing = []
+
+          print("Alertes detectees :", len(results))
+          print("Erreurs Semgrep :", len(errors))
 
           for filename, rule in expected.items():
               found = any(
@@ -90,24 +105,16 @@ jobs:
                   and r["check_id"].endswith(rule)
                   for r in results
               )
+
               print(("PASS" if found else "FAIL"), filename)
+
               if not found:
                   missing.append(filename)
 
           if errors or missing:
-              raise SystemExit("ECHEC : analyse incomplete ou detection manquante")
+              raise SystemExit("ECHEC : verification incomplete")
 
-          print("SUCCES : les 7 types sont detectes")
-
-          with open(
-              __import__("os").environ["GITHUB_STEP_SUMMARY"], "a"
-          ) as summary:
-              summary.write(
-                  f"## Validation Semgrep\n\n"
-                  f"- Alertes totales : {len(results)}\n"
-                  f"- Erreurs : {len(errors)}\n"
-                  f"- Vulnerabilites detectees : 7/7\n"
-              )
+          print("SUCCES : 7 types de vulnerabilites detectes")
           PY
 
       - name: Conserver le rapport Semgrep
